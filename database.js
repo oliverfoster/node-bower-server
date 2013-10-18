@@ -3,11 +3,16 @@ var _ = Sequelize.Utils._ ;
 
 var Database = {
     init: function () {
-        this.sequelize = new Sequelize('development', 'jblanche', '', {
-            dialect: 'postgres',
-            port: 5432
-        }),
+        var match = process.env.DATABASE_URL.match(/postgres:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)/);
 
+        this.sequelize = new Sequelize(match[5], match[1], match[2], {
+          dialect:  'postgres',
+          protocol: 'postgres',
+          port:     match[4],
+          host:     match[3],
+          logging:  true //false
+        });
+  
         this.Package = this.sequelize.define('Package',
           {
             name: {
