@@ -7,5 +7,5 @@ sync.success(database.onSync.bind(database));
 
 sync.success(function (pkg) {
   webserver.app.set('pkg', pkg);
-  webserver.listen(3000);
+  webserver.listen(process.env.PORT || 5000);
 });
