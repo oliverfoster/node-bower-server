@@ -5,13 +5,17 @@ var Database = {
     init: function () {
         var match = process.env.HEROKU_POSTGRESQL_RED_URL.match(/postgres:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)/);
 
-        this.sequelize = new Sequelize(match[5], match[1], match[2], {
+        var options = {
           dialect:  'postgres',
           protocol: 'postgres',
           port:     match[4],
           host:     match[3],
           logging:  true //false
-        });
+        };
+        
+        console.log('Connection:', process.env.HEROKU_POSTGRESQL_RED_URL, match);
+
+        this.sequelize = new Sequelize(match[5], match[1], match[2], options);
   
         this.Package = this.sequelize.define('Package',
           {
