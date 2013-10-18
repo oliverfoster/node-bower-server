@@ -20,7 +20,7 @@ var WebServer = {
           var errors = pkg.validate();
           if(!errors){
             pkg.save().success(function () {
-              res.send(200);
+              res.send(201);
             }).error(function (e) {
               res.send(406);
             });
