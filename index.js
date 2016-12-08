@@ -1,11 +1,9 @@
 var database = require('./database').init();
 var webserver = require('./webserver').init();
 
-var sync = database.Package.sync();
-
-sync.success(database.onSync.bind(database));
-
-sync.success(function (pkg) {
-  webserver.app.set('pkg', pkg);
-  webserver.listen(process.env.PORT || 5000);
+var sync = database.Package.sync().then( function () {
+    database.onSync.bind(database);
+}).then(function () {
+    webserver.app.set('pkg', pkg);
+    webserver.listen(process.env.PORT || 5000);
 });
