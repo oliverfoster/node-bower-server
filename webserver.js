@@ -7,7 +7,7 @@ var WebServer = {
         this.app.use(express.bodyParser());
 
         this.app.get('/packages', function(req, res){
-            this.pkg.findAll({order: 'name DESC'}).success(function(packages) {
+            this.pkg.findAll({order: 'name DESC'}).then(function(packages) {
                 res.send(packages);
             });
         }.bind(this));
@@ -33,7 +33,7 @@ var WebServer = {
 
         this.app.get('/packages/:name', function (req, res) {
           var name = req.params.name;
-          this.pkg.find({where: ["name = ?", name]}).success(function(pkg) {
+          this.pkg.find({where: ["name = ?", name]}).then(function(pkg) {
             if(pkg){
               pkg.hit();
               res.send(pkg.toJSON());
@@ -46,7 +46,7 @@ var WebServer = {
 
         this.app.get('/packages/search/:name', function (req, res) {
           var name = req.params.name;
-          this.pkg.findAll({where: ["name ilike ?", '%'+name+'%'], order: 'name DESC'}).success(function(packages) {
+          this.pkg.findAll({where: ["name ilike ?", '%'+name+'%'], order: 'name DESC'}).then(function(packages) {
             res.send(packages);
           });
         }.bind(this));

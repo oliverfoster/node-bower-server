@@ -61,6 +61,7 @@ var Database = {
             throw e;
           }
         });
+        return this;
     }
 };
 
