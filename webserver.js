@@ -17,8 +17,8 @@ var WebServer = {
           name = req.param('name');
           url = req.param('url');
           pkg = this.pkg.build({name: name, url: url});
-          var errors = pkg.validate();
-          if(!errors){
+          var status = pkg.validate();
+          if(status){
             pkg.save().success(function () {
               res.send(201);
             }).error(function (e) {
