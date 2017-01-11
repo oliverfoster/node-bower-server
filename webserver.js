@@ -17,18 +17,19 @@ var WebServer = {
           name = req.param('name');
           url = req.param('url');
           pkg = this.pkg.build({name: name, url: url});
-          var status = pkg.validate();
-          if(status){
-            pkg.save().success(function () {
-              res.send(201);
-            }).error(function (e) {
-              res.send(406);
-            });
-          }
-          else{
-            console.log(errors);
-            res.send(400);
-          }
+          pkg.validate().then(function(errors){
+              if(!errors){
+                pkg.save().then(function () {
+                  res.send(201);
+                }).catch(function (e) {
+                  res.send(406);
+                });
+              }
+              else{
+                console.log(errors);
+                res.send(400);
+              }
+          });
         }.bind(this));
 
         this.app.get('/packages/:name', function (req, res) {
