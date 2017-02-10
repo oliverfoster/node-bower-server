@@ -5,8 +5,6 @@ var express = require('express'),
 
 var WebServer = {
     init: function () {
-        this.gh = {};
-        this.checkedAdaptCollaborators = false;
         this.app = express();
         this.app.use(express.bodyParser());
 
@@ -57,35 +55,38 @@ var WebServer = {
         }.bind(this));
 
         this.app.delete('/packages/:owner/:name/:username', function (req, res) {
-          this.gh.owner = req.params.owner;
-          this.gh.name = req.params.name;
-          this.gh.username = req.params.username;
-          this.gh.url = 'https://api.github.com/repos/'+req.params.owner+'/'+req.params.name+'/collaborators/'+req.params.owner;
-          this.gh.auth_token = req.query.access_token;
+          var params = {
+            owner:req.params.owner,
+            name:req.params.name,
+            username:req.params.username,
+            url:'https://api.github.com/repos/'+req.params.owner+'/'+req.params.name+'/collaborators/'+req.params.username,
+            auth_token:req.query.access_token
+          };
 
-          this.checkedAdaptCollaborators = false;
-
-          this.pkg.find({where: ["name = ?", this.gh.name]})
-          .then(this.checkResult.bind(this))
-          .then(this.getCollaborators.bind(this))
-          .then(this.checkCollaborators.bind(this))
-          .then(this.remove.bind(this))
+          this.pkg.find({where: ["name = ?", params.name]})
+          .then(this.checkResult)
+          .then(this.authorize.bind(this, params))
+          .then(this.remove.bind(this, params))
           .then(function(code) {
+            console.log('Returning code '+code);
             res.send(code);
           })
-          .catch(function(code) {
-            res.send(code || 404);
+          .catch(function(err) {
+            console.log(err);
+            res.send(404);
           })
           .done();
         }.bind(this));
 
         return this;
     },
+
     listen: function (port) {
         this.pkg = this.app.get('pkg');
         this.app.listen(port);
         return this;
     },
+
     checkResult:function(pkg) {
       var deferred = Q.defer();
 
@@ -97,52 +98,84 @@ var WebServer = {
 
       return deferred.promise;
     },
-    getCollaborators:function() {
+
+    authorize:function(params) {
       var deferred = Q.defer();
 
+      // check collaborators for the given repo
+      this.checkCollaborators(params).then(function(code) {
+        // user is a collaborator on the given repo
+        deferred.resolve();
+      })
+      .catch(function(code) {
+        // check if user is collaborator on framework
+        params.url = 'https://api.github.com/repos/adaptlearning/adapt_framework/collaborators/'+params.username;
+        this.checkCollaborators(params).then(function(code) {
+          // user is a collaborator on the framework
+          deferred.resolve();
+        })
+        .catch(function(code) {
+          deferred.reject();
+        })
+        .done();
+      }.bind(this))
+      .done();
+
+      return deferred.promise;
+    },
+
+    checkCollaborators:function(params) {
+      var deferred = Q.defer();
+
+      this.getCollaborators(params).then(function(res) {
+        var code = res.statusCode;
+        console.log('received code '+code);
+        // GitHub returns 204 if user is collaborator
+        if (code==204) return deferred.resolve(204);
+        // follow a redirect if necessary
+        if (code==301 || code==302 || code==307) {
+          console.log('redirect ('+code+') to: '+res.headers.location);
+          params.url = res.headers.location;
+          this.checkCollaborators(params).then(function(code) {
+            deferred.resolve(code);
+          })
+          .catch(function(code) {
+            deferred.reject(code);
+          });
+        }
+        // otherwise give up
+        else return deferred.reject(code);
+      }.bind(this))
+      .catch(function(err) {
+        console.log('checkCollaborators error', err);
+        deferred.reject();
+      })
+      .done();
+
+      return deferred.promise;
+    },
+
+    getCollaborators:function(params) {
+      var deferred = Q.defer();
+      console.log('getCollaborators ',params.url);
       request({
-        url: this.gh.url,
+        url: params.url,
         method:'GET',
-        headers: {'Authorization':'token '+this.gh.auth_token, 'User-Agent':this.gh.owner}
+        headers: {'Authorization':'token '+params.auth_token, 'User-Agent':params.owner},
+        followRedirect:false
       }, function(err, res, body) {
-        /*console.log('getCollaborators:');
-        console.log('err', err);
-        console.log('res', res);
-        console.log('body', body);*/
         if (err) {
-          console.log('err', err);
-          deferred.reject(403);
+          deferred.reject(err);
         } else {
-          deferred.resolve({response:res, body:body});
+          deferred.resolve(res);
         }
       });
 
       return deferred.promise;
     },
-    checkCollaborators: function(collaborators) {
-      var code = collaborators.response.statusCode;
 
-      if (code == 204) {
-        this.logCollaborator();
-        return Q.resolve();
-      }
-      else if (code == 301 || code == 302 || code == 307) {
-        this.redirect(collaborators.response.headers.location);
-        return this.getCollaborators();
-      }
-      else if (code == 401 || code == 403) {
-        return Q.reject(403);
-      }
-      else if (code == 404 && !this.checkedAdaptCollaborators) {
-        this.tryAdaptCollaborators();
-        return this.getCollaborators();
-      }
-      else {
-        return Q.reject(404);
-      }
-    },
-    remove:function() {
-      return this.pkg.destroy({where: ["name = ?", this.gh.name]}).then(function(count) {
+    remove:function(params) {
+      return this.pkg.destroy({where: ["name = ?", params.name]}).then(function(count) {
         if (count > 0) {
           console.log('Successfully deleted package');
           return 204;
@@ -150,24 +183,6 @@ var WebServer = {
           return 404;
         }
       });
-    },
-    redirect:function(target) {
-      this.logRedirect(target);
-      this.gh.url = target;
-    },
-    tryAdaptCollaborators:function() {
-      this.gh.url = 'https://api.github.com/repos/adaptlearning/adapt_framework/collaborators/'+this.gh.username;
-      this.checkedAdaptCollaborators = true;
-    },
-    logCollaborator:function() {
-      if (this.checkedAdaptCollaborators) {
-        console.log(this.gh.username+' is a collaborator on adaptlearning/adapt_framework');
-      } else {
-        console.log(this.gh.username+' is a collaborator on '+this.gh.owner+'/'+this.gh.name);
-      }
-    },
-    logRedirect:function(target) {
-      console.log('Redirecting from '+this.gh.url+ ' to '+target);
     }
 };
 
