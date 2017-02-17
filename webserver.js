@@ -54,16 +54,17 @@ var WebServer = {
           });
         }.bind(this));
 
-        this.app.delete('/packages/:owner/:name/:username', function (req, res) {
+        this.app.delete('/packages/:owner/:name/:username/:pluginName', function (req, res) {
           var params = {
             owner:req.params.owner,
             name:req.params.name,
             username:req.params.username,
+            pluginName:req.params.pluginName,
             url:'https://api.github.com/repos/'+req.params.owner+'/'+req.params.name+'/collaborators/'+req.params.username,
             auth_token:req.query.access_token
           };
 
-          this.pkg.find({where: ["name = ?", params.name]})
+          this.pkg.find({where: ["name = ?", params.pluginName]})
           .then(this.checkResult)
           .then(this.authorize.bind(this, params))
           .then(this.remove.bind(this, params))
@@ -175,7 +176,7 @@ var WebServer = {
     },
 
     remove:function(params) {
-      return this.pkg.destroy({where: ["name = ?", params.name]}).then(function(count) {
+      return this.pkg.destroy({where: ["name = ?", params.pluginName]}).then(function(count) {
         if (count > 0) {
           console.log('Successfully deleted package');
           return 204;
