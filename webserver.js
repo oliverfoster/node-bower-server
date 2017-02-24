@@ -54,6 +54,35 @@ var WebServer = {
           });
         }.bind(this));
 
+        this.app.get('/packages/rename/:owner/:name/:username/:oldPluginName/:newPluginName', function (req, res) {
+          var params = {
+            owner:req.params.owner,
+            name:req.params.name,
+            username:req.params.username,
+            oldPluginName:req.params.oldPluginName,
+            newPluginName:req.params.newPluginName,
+            url:'https://api.github.com/repos/'+req.params.owner+'/'+req.params.name+'/collaborators/'+req.params.username,
+            auth_token:req.query.access_token
+          };
+
+           Q(params)
+          .then(this.authorize.bind(this))
+          .thenResolve(this.pkg.find.bind(this.pkg))
+          .fcall({where: ["name = ?", params.oldPluginName]})
+          .then(function(pkg) {
+            return pkg ? Q.resolve(pkg.rename(params.newPluginName)) : Q.reject();
+          })
+          .then(function() {
+            res.send(201);
+          })
+          .catch(function(err) {
+            console.log(err);
+            res.send(404);
+          })
+          .done();
+
+        }.bind(this));
+
         this.app.delete('/packages/:owner/:name/:username/:pluginName', function (req, res) {
           var params = {
             owner:req.params.owner,
@@ -69,7 +98,6 @@ var WebServer = {
           .then(this.authorize.bind(this, params))
           .then(this.remove.bind(this, params))
           .then(function(code) {
-            console.log('Returning code '+code);
             res.send(code);
           })
           .catch(function(err) {
@@ -77,6 +105,7 @@ var WebServer = {
             res.send(404);
           })
           .done();
+
         }.bind(this));
 
         return this;
@@ -130,12 +159,10 @@ var WebServer = {
 
       this.getCollaborators(params).then(function(res) {
         var code = res.statusCode;
-        console.log('received code '+code);
         // GitHub returns 204 if user is collaborator
         if (code==204) return deferred.resolve(204);
         // follow a redirect if necessary
         if (code==301 || code==302 || code==307) {
-          console.log('redirect ('+code+') to: '+res.headers.location);
           params.url = res.headers.location;
           this.checkCollaborators(params).then(function(code) {
             deferred.resolve(code);
@@ -158,7 +185,7 @@ var WebServer = {
 
     getCollaborators:function(params) {
       var deferred = Q.defer();
-      console.log('getCollaborators ',params.url);
+
       request({
         url: params.url,
         method:'GET',
@@ -178,7 +205,7 @@ var WebServer = {
     remove:function(params) {
       return this.pkg.destroy({where: ["name = ?", params.pluginName]}).then(function(count) {
         if (count > 0) {
-          console.log('Successfully deleted package');
+          console.log('Successfully deleted package '+params.pluginName);
           return 204;
         } else {
           return 404;
