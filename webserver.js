@@ -1,4 +1,5 @@
 var express = require('express'),
+    gh = require('parse-github-url'),
     Q = require('q'),
     request = require('request'),
     util = require("util");
@@ -54,54 +55,59 @@ var WebServer = {
           });
         }.bind(this));
 
-        this.app.get('/packages/rename/:owner/:name/:username/:oldPluginName/:newPluginName', function (req, res) {
+        this.app.get('/packages/rename/:username/:oldPluginName/:newPluginName', function (req, res) {
           var params = {
-            owner:req.params.owner,
-            name:req.params.name,
             username:req.params.username,
             oldPluginName:req.params.oldPluginName,
             newPluginName:req.params.newPluginName,
-            url:'https://api.github.com/repos/'+req.params.owner+'/'+req.params.name+'/collaborators/'+req.params.username,
             auth_token:req.query.access_token
           };
 
-           Q(params)
-          .then(this.authorize.bind(this))
-          .thenResolve(this.pkg.find.bind(this.pkg))
-          .fcall({where: ["name = ?", params.oldPluginName]})
+          this.pkg.find({where: ["name = ?", params.oldPluginName]})
           .then(function(pkg) {
-            return pkg ? Q.resolve(pkg.rename(params.newPluginName)) : Q.reject();
+            if (pkg) {
+              params.pkg = pkg;
+              params.url = 'https://api.github.com/repos/'+gh(pkg.url).repo+'/collaborators/'+req.params.username;
+              return Q.resolve();
+            }
+            return Q.reject(404);
           })
+          .then(this.authorize.bind(this, params))
+          .then(this.rename.bind(this, params))
           .then(function() {
             res.send(201);
           })
           .catch(function(err) {
-            console.log(err);
-            res.send(404);
+            console.log("rename failed with error", err);
+            res.send(typeof err == "number" ? err : 500);
           })
           .done();
 
         }.bind(this));
 
-        this.app.delete('/packages/:owner/:name/:username/:pluginName', function (req, res) {
+        this.app.delete('/packages/:username/:pluginName', function (req, res) {
           var params = {
-            owner:req.params.owner,
-            name:req.params.name,
             username:req.params.username,
             pluginName:req.params.pluginName,
-            url:'https://api.github.com/repos/'+req.params.owner+'/'+req.params.name+'/collaborators/'+req.params.username,
             auth_token:req.query.access_token
           };
 
           this.pkg.find({where: ["name = ?", params.pluginName]})
-          .then(this.checkResult)
+          .then(function(pkg) {
+            if (pkg) {
+              params.pkg = pkg;
+              params.url = 'https://api.github.com/repos/'+gh(pkg.url).repo+'/collaborators/'+req.params.username;
+              return Q.resolve();
+            }
+            return Q.reject();
+          })
           .then(this.authorize.bind(this, params))
           .then(this.remove.bind(this, params))
           .then(function(code) {
             res.send(code);
           })
           .catch(function(err) {
-            console.log(err);
+            console.log("unregister failed with error", err);
             res.send(404);
           })
           .done();
@@ -117,24 +123,13 @@ var WebServer = {
         return this;
     },
 
-    checkResult:function(pkg) {
-      var deferred = Q.defer();
-
-      if (pkg) {
-        deferred.resolve();
-      } else{
-        deferred.reject();
-      }
-
-      return deferred.promise;
-    },
-
     authorize:function(params) {
       var deferred = Q.defer();
 
       // check collaborators for the given repo
       this.checkCollaborators(params).then(function(code) {
         // user is a collaborator on the given repo
+        console.log(params.username,'is a collaborator');
         deferred.resolve();
       })
       .catch(function(code) {
@@ -142,10 +137,11 @@ var WebServer = {
         params.url = 'https://api.github.com/repos/adaptlearning/adapt_framework/collaborators/'+params.username;
         this.checkCollaborators(params).then(function(code) {
           // user is a collaborator on the framework
+          console.log(params.username,'is a framework collaborator');
           deferred.resolve();
         })
         .catch(function(code) {
-          deferred.reject();
+          deferred.reject(code);
         })
         .done();
       }.bind(this))
@@ -176,7 +172,7 @@ var WebServer = {
       }.bind(this))
       .catch(function(err) {
         console.log('checkCollaborators error', err);
-        deferred.reject();
+        deferred.reject(500);
       })
       .done();
 
@@ -189,7 +185,7 @@ var WebServer = {
       request({
         url: params.url,
         method:'GET',
-        headers: {'Authorization':'token '+params.auth_token, 'User-Agent':params.owner},
+        headers: {'Authorization':'token '+params.auth_token, 'User-Agent':'adapt-bower-repository'},
         followRedirect:false
       }, function(err, res, body) {
         if (err) {
@@ -210,6 +206,12 @@ var WebServer = {
         } else {
           return 404;
         }
+      });
+    },
+
+    rename:function(params) {
+      return Q.try(function() {
+        params.pkg.rename(params.newPluginName)
       });
     }
 };
