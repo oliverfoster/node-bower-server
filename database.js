@@ -48,6 +48,10 @@ var Database = {
             hit: function () {
               this.hits += 1 ;
               this.save();
+            },
+            rename: function(newName) {
+              this.name = newName;
+              this.save();
             }
           }
         });

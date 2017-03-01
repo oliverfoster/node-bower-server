@@ -5,8 +5,11 @@
   "version": "0.0.1",
   "dependencies": {
     "express": "~3.0.5",
+    "parse-github-url": "~0.3.0",
     "pg": "~6.1.0",
     "pg-hstore": "^2.3.2",
+    "q": "~1.4.1",
+    "request": "~2.79.0",
     "sequelize": "~3.27.0"
   },
   "devDependencies": {
